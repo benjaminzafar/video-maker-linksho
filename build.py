@@ -15,7 +15,7 @@ import time
 import edge_tts
 import imageio_ffmpeg
 from mutagen.mp3 import MP3
-from editorial import prepare_long
+from editorial import prepare
 from voice import synthesize
 from visuals import create as make_slides
 import feedparser
@@ -172,7 +172,7 @@ async def main():
         mode = "persian-rss"
         if os.getenv("GEMINI_API_KEY", "").strip():
             try:
-                script, sources, editorial = prepare_long(news)
+                script, sources, editorial = prepare(news)
                 mode = "gemini-editorial"
             except Exception as exc:
                 # Keep production alive during Gemini free-tier capacity spikes,
@@ -186,6 +186,27 @@ async def main():
             script = compose_script(news[:30])
             sources = news[:30]
     provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
+    if mode == "gemini-editorial" and seconds < MIN_SECONDS:
+        # Gemini free-tier sometimes writes a polished but short segment.
+        # Complete it with additional *unused* RSS items, never invented filler.
+        cited = {item.get("link") for item in sources}
+        remaining = [item for item in news if item.get("link") not in cited]
+        gemini_opening = script
+        first_sources = list(sources)
+        for number in (7, 10, 13, 16, 19, 23):
+            added = remaining[:number]
+            if not added:
+                break
+            part = compose_script(added).split("\n\n")
+            supplemental = "\n\n".join(part[1:-1])
+            script = gemini_opening + "\n\n" + supplemental
+            sources = first_sources + added
+            provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
+            print(f"Gemini plus {len(added)} attributed RSS briefs: {seconds:.1f}s")
+            if MIN_SECONDS <= seconds <= MAX_SECONDS:
+                break
+        editorial["extended_with_attributed_rss"] = len(sources) - len(first_sources)
+
     # The fallback RSS editor has predictable story-length granularity. Adjust
     # number of stories and resynthesize instead of silently accepting 14-minute episodes.
     if mode in ("persian-rss", "persian-rss-fallback") and not MIN_SECONDS <= seconds <= MAX_SECONDS:
