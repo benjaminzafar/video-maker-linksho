@@ -183,6 +183,25 @@ async def main():
             script = compose_script(news[:30])
             sources = news[:30]
     provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
+    # The fallback RSS editor has predictable story-length granularity. Adjust
+    # number of stories and resynthesize instead of silently accepting 14-minute episodes.
+    if mode == "persian-rss" and not MIN_SECONDS <= seconds <= MAX_SECONDS:
+        count = len(sources)
+        for attempt in range(4):
+            ratio = 600 / max(seconds, 1)
+            next_count = min(len(news), max(8, int(count * ratio)))
+            if next_count == count:
+                next_count = count - 2 if seconds > MAX_SECONDS else count + 2
+            next_count = min(len(news), max(8, next_count))
+            if next_count == count:
+                break
+            count = next_count
+            sources = news[:count]
+            script = compose_script(sources)
+            provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
+            print(f"Adjusted RSS story count to {count}: {seconds:.1f}s")
+            if MIN_SECONDS <= seconds <= MAX_SECONDS:
+                break
     (OUTPUT / "script.txt").write_text(script, encoding="utf-8")
     (OUTPUT / "sources.json").write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
     metadata = {
