@@ -1,7 +1,5 @@
 name: Build Persian news podcast
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
   repository_dispatch:
     types: [make-podcast]
@@ -28,13 +26,20 @@ jobs:
       - name: Install FFmpeg, fonts and Python libraries
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Generate 8–12 minute Persian video
         env:
           TTS_VOICE: fa-IR-DilaraNeural
           TTS_RATE: -5%
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_SEARCH_GROUNDING: 'false'
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL: eleven_multilingual_v2
+          VOICE_PROVIDER: ${{ secrets.ELEVENLABS_API_KEY != '' && 'elevenlabs' || 'edge' }}
         run: python build.py
       - name: Save MP4, audio, sources and text
         if: success()
