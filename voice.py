@@ -35,7 +35,7 @@ def _eleven(script, output):
     if not key:
         raise RuntimeError("ELEVENLABS_API_KEY was not configured")
     model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
-    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "TX3LPaxmHKxFdv7VOQHJ")
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip() or "TX3LPaxmHKxFdv7VOQHJ"
     segments = chunks(script)
     if not segments or len(segments) > 30:
         raise RuntimeError("Unreasonable script length for ElevenLabs")
