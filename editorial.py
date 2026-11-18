@@ -136,3 +136,89 @@ def prepare(items):
         "search_review": grounding.get("search_review", "")[:2000],
     }
     return script, selected, details
+
+
+def prepare_long(items):
+    """Four source-disjoint Gemini passes produce an 8–12 minute newsroom draft."""
+    if len(items) < 20:
+        raise RuntimeError("Need at least 20 dated RSS items for a balanced long Gemini episode")
+    topics = [
+        ("بازارها و اقتصاد", ("اقتصاد","بانک","بازار","مالی","بورس","ارز","بیت‌کوین","تورم","تجارت")),
+        ("اروپا و مهاجرت", ("اروپا","اتحادیه","مهاجرت","پناهجو","سوئد","آلمان","فرانسه","بریتانیا")),
+        ("انرژی و محیط زیست", ("انرژی","نفت","گاز","سوخت","برق","اقلیم","قیمت")),
+    ]
+    chosen = []
+    used = set()
+    for _, keys in topics:
+        relevant = [i for i, item in enumerate(items) if i not in used
+                    and any(k in item["title"] + " " + item.get("summary","") for k in keys)]
+        for i in relevant[:7]:
+            used.add(i)
+            chosen.append(items[i])
+    for i, item in enumerate(items):
+        if len(chosen) >= 28:
+            break
+        if i not in used:
+            chosen.append(item)
+    chosen = chosen[:28]
+    batches = [chosen[i:i+7] for i in range(0, len(chosen), 7)]
+    if len(batches) < 3:
+        raise RuntimeError("Insufficient article groups for long-form narration")
+    scripts = []
+    story_ids = []
+    for section_index, batch in enumerate(batches, 1):
+        base = (section_index - 1) * 7
+        references = [
+            {"id": base + offset + 1, "title": a["title"][:180],
+             "summary": a.get("summary","")[:360],
+             "publisher": a.get("source",""), "published": a.get("published",""),
+             "url": a.get("link","")}
+            for offset, a in enumerate(batch)
+        ]
+        prompt = f"""
+تو سردبیر خبری مستقل پادکست Linksho هستی. بخش {section_index} از {len(batches)}.
+تنها از منابع خبری فهرست زیر استفاده کن. هفت خبر را با زبانی ساده، روان،
+حرفه‌ای و بی‌طرف گزارش کن. حدود ۳۵۰ تا ۴۵۰ کلمه فارسی بنویس،
+با گذار طبیعی میان خبرها. هیچ اطلاعات، تحلیل قطعی، عدد، تاریخ یا
+نقل‌قول جدیدی که در متن کوتاه منبع وجود ندارد تولید نکن.
+متن خبرگزاری‌ها را عیناً کپی نکن. از بازگویی مکرر یک خبر پرهیز کن.
+برای هر خبر به نام رسانه‌اش اشاره کن؛ URL را در متن گویندگی نخوان.
+اگر شواهد برای طول بخش کافی نیست، متن کوتاه‌تر تولید کن.
+تنها خروجی یک JSON معتبر با دو کلید زیر است:
+"script": متن فارسی گویندگی
+"story_ids": آرایه ID عددیِ خبرهایی که واقعاً استفاده شدند
+فقط از شناسه‌های همین بخش استفاده کن.
+منابع:
+{json.dumps(references, ensure_ascii=False)}
+"""
+        output, _ = _call(prompt, json_mode=True)
+        try:
+            obj = json.loads(output.strip())
+            part = str(obj.get("script","")).strip()
+            ids = obj.get("story_ids", [])
+            valid_ids = {ref["id"] for ref in references}
+            if len(part.split()) < 130 or len(re.findall(r"[\u0600-\u06FF]",part)) < 400:
+                raise ValueError("section too short")
+            if not isinstance(ids,list) or not any(type(i) is int and i in valid_ids for i in ids):
+                raise ValueError("missing valid source citations")
+            story_ids.extend(i for i in ids if type(i) is int and i in valid_ids)
+            scripts.append(part)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise RuntimeError(f"Gemini section {section_index} failed validation") from exc
+    total = sum(len(part.split()) for part in scripts)
+    if not 700 <= total <= 1900:
+        raise RuntimeError(f"Gemini combined output has {total} words, outside usable range")
+    intro = "سلام. به مرور هفتگی خبرهای لینک‌شو خوش آمدید. در این قسمت، خبرهای مهم را با اشاره به منابع اصلی مرور می‌کنیم."
+    outro = "این گزارش بر اساس تیترها و خلاصه‌های منتشرشده از رسانه‌های خبری تهیه شده است. برای بررسی جزئیات، لینک منابع در فایل همراه ویدیو موجود است. تا هفته آینده، بدرود."
+    ordered_ids = sorted(set(story_ids))
+    sources = [chosen[i - 1] for i in ordered_ids]
+    script = "\n\n".join([intro] + scripts + [outro])
+    return script, sources, {
+        "editor": "gemini-multipass",
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+        "title": "مرور هفتگی اقتصاد، اروپا و جهان",
+        "script_words": len(script.split()),
+        "stories_cited": len(sources),
+        "independently_verified": False,
+        "sections": len(scripts)
+    }
