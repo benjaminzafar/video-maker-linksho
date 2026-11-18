@@ -1,5 +1,7 @@
 name: Build Persian news podcast
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   repository_dispatch:
     types: [make-podcast]
@@ -24,12 +26,21 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install FFmpeg, fonts and Python libraries
+      - name: Install dependencies without blocking apt update
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-core
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+          python -m pip install -r requirements.txt
+      - name: Verify connected API credentials
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          print("Gemini secret configured:", bool(os.getenv("GEMINI_API_KEY")))
+          print("ElevenLabs secret configured:", bool(os.getenv("ELEVENLABS_API_KEY")))
+          PY
       - name: Generate 8–12 minute Persian video
         env:
           TTS_VOICE: fa-IR-DilaraNeural
