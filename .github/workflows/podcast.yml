@@ -1,5 +1,7 @@
 name: Build Persian news podcast
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   repository_dispatch:
     types: [make-podcast]
@@ -10,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: linksho-newsroom-final
+  group: linksho-smoke-v3
   cancel-in-progress: false
 
 jobs:
