@@ -6,12 +6,11 @@ import subprocess
 import time
 import requests
 import edge_tts
+import imageio_ffmpeg
+from mutagen.mp3 import MP3
 
 def length(path):
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                        "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-                       capture_output=True, text=True, check=True)
-    return float(r.stdout.strip())
+    return float(MP3(str(path)).info.length)
 
 def chunks(script, max_chars=2900):
     paragraphs = script.replace("\r", "").split("\n")
@@ -34,7 +33,7 @@ def _eleven(script, output):
     key = os.getenv("ELEVENLABS_API_KEY", "").strip()
     if not key:
         raise RuntimeError("ELEVENLABS_API_KEY was not configured")
-    model = os.getenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    model = os.getenv("ELEVENLABS_MODEL", "eleven_v3")
     voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip() or "TX3LPaxmHKxFdv7VOQHJ"
     segments = chunks(script)
     if not segments or len(segments) > 30:
@@ -55,7 +54,12 @@ def _eleven(script, output):
         )
         if resp.status_code != 200:
             # Never output API tokens, request headers or unfiltered service error bodies.
-            raise RuntimeError(f"ElevenLabs returned HTTP {resp.status_code} for chunk {i + 1}/{len(segments)}")
+            try:
+                detail = resp.json().get("detail", {})
+                reason = detail.get("status", "") if isinstance(detail, dict) else ""
+            except (ValueError, TypeError):
+                reason = ""
+            raise RuntimeError(f"ElevenLabs HTTP {resp.status_code} {reason} for chunk {i + 1}/{len(segments)}")
         if len(resp.content) < 1024:
             raise RuntimeError("ElevenLabs returned an unexpectedly small audio file")
         part = working / f"part_{i:03}.mp3"
@@ -64,7 +68,7 @@ def _eleven(script, output):
         time.sleep(0.4)
     lst = working / "list.txt"
     lst.write_text("".join(f"file '{p.name}'\n" for p in paths), encoding="utf-8")
-    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
                     "-f", "concat", "-safe", "0", "-i", str(lst),
                     "-c", "copy", str(output)], check=True, cwd=working)
 
