@@ -1,0 +1,3 @@
+# Only Persian-language feeds are used in standalone mode. Add verified Persian RSS URLs, one per line.
+# BBC Persian RSS:
+https://feeds.bbci.co.uk/persian/rss.xml
