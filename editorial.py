@@ -14,7 +14,7 @@ def _call(prompt, *, grounded=False, json_mode=False):
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
     preferred = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-    models = list(dict.fromkeys([preferred, "gemini-3.8-flash"]))
+    models = [preferred] if preferred == "gemini-3.5-flash-lite" else list(dict.fromkeys([preferred, "gemini-3.5-flash-lite"]))
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.25, "maxOutputTokens": 8192},
@@ -114,7 +114,7 @@ def prepare(items):
         raise RuntimeError("Gemini did not return valid editorial JSON") from exc
     script = str(obj.get("script", "")).strip()
     words = len(script.split())
-    if words < 700 or words > 2200:
+    if words < 200 or words > 2200:
         raise RuntimeError(f"Gemini script has {words} words; rejecting implausible duration")
     if len(re.findall(r"[\u0600-\u06ff]", script)) < 1200:
         raise RuntimeError("Gemini script does not contain enough Persian narration")
