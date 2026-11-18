@@ -1,57 +1,63 @@
 # video-maker-linksho
 
-Free, auditable **Persian weekly-news podcast** builder: RSS headlines and summaries → Persian narration → Edge TTS → FFmpeg MP4 → private GitHub Actions artifact.
+An automated Persian-language weekly-news podcast builder, with a **consistent Linksho visual identity**.
 
-## What it does
+## Pipeline
 
-- Pulls recent **Persian-language** RSS entries (currently BBC Persian) and attributes each headline to the originating publisher.
-- Makes a short original transition-led digest from the titles and RSS summaries, with a source list. It **does not** pretend that unverified headlines are comprehensive reporting.
-- Synthesizes Persian speech with Edge TTS, produces 1280x720 MP4 with FFmpeg, and saves script, MP3, sources and metadata.
-- Checks actual spoken duration with ffprobe. **An episode that is not 8–12 minutes fails rather than publishing a misleading or too-short video.**
-- Runs Mondays at 07:00 UTC, plus manually. GitHub schedules use UTC, not Europe/Stockholm daylight saving time.
-- Accepts an optional Make-generated, fully Persian narration via the GitHub \`repository_dispatch\` event type \`make-podcast\`.
-- **Does not upload publicly to YouTube.** Add OAuth separately after reviewing a few generated episodes.
+1. Read recent Persian news headlines, short RSS summaries and their original URLs.
+2. If `GEMINI_API_KEY` is available, use Gemini 2.5 Flash to prioritize stories and compose a sourced, neutral Persian narration, citing actual RSS IDs. Without the key, a basic source-attributed RSS summary is used.
+3. If `ELEVENLABS_API_KEY` is available, use ElevenLabs multilingual voice. If unavailable, fail/quota-limited or not configured, use Persian Edge TTS.
+4. Create consistent **1280x720** slides with the exact dark-navy, turquoise and white palette. All titles use the same logo/spacing/type hierarchy. The slides are generated locally, so there is **no paid image-generation dependency**.
+5. Render with FFmpeg, validate audio duration (**8–12 minutes**), and store artifacts for review. Episodes are **NOT auto-published to YouTube**.
 
-## How to run
+### Color and layout rules
 
-1. Open the repository **Actions** tab and select **Build Persian news podcast**.
-2. Click **Run workflow**.
-3. After a successful run, download **linksho-weekly-podcast** from the workflow's Artifacts section. The ZIP contains \`podcast.mp4\`, \`voice.mp3\`, \`script.txt\`, \`sources.json\`, and \`metadata.json\`.
-4. If an episode fails for insufficient news, extend \`feeds.txt\` with verified, accessible **Persian-language** RSS feeds. The workflow does not invent or translate missing stories.
+- Navy: `#101A2B` background
+- Deep blue: `#17283E` card/panel
+- Turquoise: `#26C3B8` highlights and accent bar
+- Off-white: `#F0F5FA` headlines
+- Consistent typography, logo and margins throughout each video.
 
-To test locally on Ubuntu:
+## One-time setup (GitHub Actions)
 
-\`\`\`bash
-sudo apt-get install ffmpeg fonts-dejavu-core
-python -m pip install -r requirements.txt
-python build.py
-\`\`\`
+Open **Settings → Secrets and variables → Actions → New repository secret**:
 
-## Make scenario 8648047 connection
+| Secret | Purpose |
+| --- | --- |
+| `GEMINI_API_KEY` | Optional. AI journalism and Persian report writing. Obtain from [Google AI Studio](https://aistudio.google.com/apikey). |
+| `ELEVENLABS_API_KEY` | Optional. Natural voice from your ElevenLabs account. If omitted, Edge TTS speaks for free. |
 
-This repository is ready to receive a Persian script from Make, but **scenario 8648047 has not yet been reconfigured**. To connect Make, create a GitHub credential **in Make**, then have Make use GitHub's REST API:
+Optional: under **Variables → New repository variable**, add `ELEVENLABS_VOICE_ID` for a preferred Persian-capable voice. By default, the repository uses the old existing ElevenLabs Liam voice (English-oriented, so **select a tested Persian voice for good pronunciation**).
 
-\`\`\`http
-POST /repos/benjaminzafar/video-maker-linksho/dispatches
-Content-Type: application/json
+Never paste API keys in Issues, commits, chat, or a public repository file.
 
-{
-  "event_type": "make-podcast",
-  "client_payload": {
-    "script": "متن گویندگی فارسی کامل از خروجی Make",
-    "sources": [{"title": "عنوان", "link": "https://example.org/story"}]
-  }
-}
-\`\`\`
+**No secret is required for the fallback workflow.** Only create secrets for services you choose to use. Gemini free-tier quotas and availability vary by model, region and billing status. ElevenLabs free-tier credits can be insufficient for a full 8–12-minute podcast; part of the credits may be consumed before the fallback is triggered. **ElevenLabs Free does not provide general commercial publishing rights**; review [their pricing/licensing](https://elevenlabs.io/pricing).
 
-The value of \`script\` must be **just narration**, not a whole JSON/meta-report. Target approximately 8–12 minutes of speech; the builder measures and rejects out-of-range narration.
+### Run it
 
-Never put GitHub personal access tokens in a repository or in a publicly readable workflow. GitHub accepts this API only with appropriate authorization.
+Open [GitHub Actions](https://github.com/benjaminzafar/video-maker-linksho/actions) → **Build Persian news podcast** → **Run workflow**.
 
-## Cost and constraints
+One scheduled weekly run is set for **Monday 07:00 UTC**. The final result appears in the workflow's **Artifacts** section: `podcast.mp4`, `voice.mp3`, `script.txt`, `sources.json`, `metadata.json` and the generated slides.
 
-- Standard GitHub-hosted Actions runners on **public repositories** are free, subject to GitHub's current usage policy and any ancillary storage limits.
-- FFmpeg is free open-source software. Edge TTS is an unofficial third-party interface and may change, become unavailable, or impose limits.
-- The source text and your generated files might be subject to publisher attribution/licensing rules. Do not reuse full third-party stories without permission.
-- This is a **working baseline**, not a fully edited professional newsroom show. It doesn't independently fact-check linked articles, translate English feeds, guarantee all topic categories, add varied footage, or automatically publish to YouTube.
-- The repo is public: **never send confidential Make AI outputs or sensitive information** in dispatched payloads or workflow logs.
+If the report is too short/long or contains too little current RSS evidence, the run fails rather than inventing filler or publishing a misleading podcast. You can add more **verified Persian RSS URLs** to `feeds.txt`.
+
+### Make scenario 8648047
+
+The existing Make scenario was modified to send its Persian narration to `/repos/benjaminzafar/video-maker-linksho/dispatches`, but this action returned HTTP 404 from Make's GitHub credential; a separate workflow-dispatch test also returned a 403 permissions error. Thus **Make scenario 8648047 remains inactive**, and **GitHub's own schedule runs the production workflow**. Do not enable both schedules until the permission issue is fixed.
+
+The Gemini editor uses only the RSS-provided claims, does not independently fact-check every article and does not claim to do so. Search-grounding is **off by default** (`GEMINI_SEARCH_GROUNDING=false`) because pricing and availability can vary. Review source URLs and publication rights before publishing.
+
+### Visuals
+
+The system currently uses consistent generated editorial templates rather than paid Gemini image generation. If imagery is added later, preserve this template and brand colors as an overlay. Image generation with Gemini may require a paid model. Do not turn it on without reviewing costs.
+
+## Local run
+
+On Ubuntu, install `ffmpeg`, `fonts-noto-core` and `fonts-dejavu-core`, then `pip install -r requirements.txt` and `python build.py`. Environment-variable secrets are optional.
+
+## Security and reliability
+
+- Repository is public; secrets are available only via GitHub Actions secret environment variables.
+- Workflow artifacts are available through the Actions UI to users permitted to read Actions artifacts; they are **not** published to YouTube.
+- RSS text is untrusted input. The system restricts source IDs and dates but can't guarantee factual accuracy.
+- FFmpeg and local slide generation are free; GitHub's public-repo Actions are subject to applicable usage conditions. API free tiers may change.
