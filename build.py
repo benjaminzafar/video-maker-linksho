@@ -13,6 +13,9 @@ import textwrap
 import time
 
 import edge_tts
+from editorial import prepare
+from voice import synthesize
+from visuals import create as make_slides
 import feedparser
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -129,28 +132,23 @@ def duration(path):
 async def speak(text, voice, rate):
     await edge_tts.Communicate(text, voice=voice, rate=rate).save(str(OUTPUT / "voice.mp3"))
 
-def cover():
-    w, h = 1280, 720
-    im = Image.new("RGB", (w, h), (12, 20, 37))
-    draw = ImageDraw.Draw(im)
-    draw.rounded_rectangle((75, 80, 1205, 636), radius=24, fill=(19, 31, 54),
-                           outline=(55, 79, 115), width=2)
-    draw.rectangle((75, 80, 88, 636), fill=(42, 187, 179))
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    head = ImageFont.truetype(font_path, 64)
-    sub = ImageFont.truetype(font_path, 34)
-    small = ImageFont.truetype(font_path, 23)
-    draw.text((145, 210), "LINKSHO", font=head, fill=(245, 250, 254))
-    draw.text((149, 330), "WEEKLY NEWS PODCAST", font=sub, fill=(66, 216, 199))
-    draw.text((149, 423), "Economy  /  Europe  /  Markets", font=small, fill=(194, 206, 224))
-    draw.text((149, 524), dt.date.today().isoformat(), font=small, fill=(143, 160, 186))
-    im.save(OUTPUT / "cover.png")
-
-def render():
+def render(sources, seconds, title):
+    slides = make_slides(OUTPUT / "slides", sources, title)
+    if len(slides) < 2:
+        raise RuntimeError("No slides generated")
+    each = seconds / len(slides)
+    list_path = OUTPUT / "slideshow.ffconcat"
+    entries = ["ffconcat version 1.0"]
+    for path in slides:
+        entries.append(f"file 'slides/{path.name}'")
+        entries.append(f"duration {each:.4f}")
+    entries.append(f"file 'slides/{slides[-1].name}'")
+    list_path.write_text("\n".join(entries) + "\n", encoding="utf-8")
     subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-framerate", "1",
-         "-i", str(OUTPUT / "cover.png"), "-i", str(OUTPUT / "voice.mp3"),
-         "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+         "-safe", "0", "-f", "concat", "-i", str(list_path),
+         "-i", str(OUTPUT / "voice.mp3"), "-r", "25",
+         "-c:v", "libx264", "-preset", "veryfast",
          "-c:a", "aac", "-b:a", "128k", "-pix_fmt", "yuv420p",
          "-shortest", "-movflags", "+faststart", str(OUTPUT / "podcast.mp4")],
         check=True
@@ -158,55 +156,48 @@ def render():
 
 async def main():
     event = load_event()
-    voice = os.getenv("TTS_VOICE", "fa-IR-DilaraNeural")
-    rate = os.getenv("TTS_RATE", "-5%")
     raw_script = event.get("script") if isinstance(event, dict) else None
     sources = event.get("sources", []) if isinstance(event, dict) else []
+    title = "مرور هفتگی خبرهای جهان"
+    editorial = {"editor": "RSS summary"}
     if raw_script:
         if not isinstance(raw_script, str) or len(raw_script) > 55000:
             raise RuntimeError("Invalid script payload")
         script = plain(raw_script)
         if len(PERSIAN.findall(script)) < 300:
             raise RuntimeError("Payload script must be a substantial Persian narration")
-        await speak(script, voice, rate)
-        seconds = duration(OUTPUT / "voice.mp3")
         mode = "make-dispatch"
+        sources = sources if isinstance(sources, list) else []
     else:
         news = rss_news()
         if len(news) < 15:
-            raise RuntimeError(f"Only {len(news)} recent Persian RSS articles; need at least 15. Add more valid Persian RSS feeds.")
-        seconds = 0
-        script = ""
-        count = min(len(news), 30)
-        for attempt in range(5):
-            selected = news[:count]
-            script = compose_script(selected)
-            await speak(script, voice, rate)
-            seconds = duration(OUTPUT / "voice.mp3")
-            print(f"Attempt {attempt + 1}: {count} news articles, {seconds:.1f} sec")
-            if MIN_SECONDS <= seconds <= MAX_SECONDS:
-                break
-            if seconds < MIN_SECONDS and count < len(news):
-                count = min(len(news), count + 12)
-            elif seconds > MAX_SECONDS and count > 16:
-                count = max(16, count - 7)
-            else:
-                break
-        sources = news[:count]
+            raise RuntimeError(f"Only {len(news)} recent Persian RSS articles; need at least 15.")
         mode = "persian-rss"
+        if os.getenv("GEMINI_API_KEY", "").strip():
+            try:
+                script, sources, editorial = prepare(news)
+                mode = "gemini-editorial"
+            except Exception as exc:
+                raise RuntimeError(f"Gemini editorial failed: {type(exc).__name__}: {exc}") from exc
+        else:
+            script = compose_script(news[:30])
+            sources = news[:30]
+    provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
     (OUTPUT / "script.txt").write_text(script, encoding="utf-8")
     (OUTPUT / "sources.json").write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
-    (OUTPUT / "metadata.json").write_text(
-        json.dumps({"generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-                    "mode": mode, "voice": voice, "duration_seconds": seconds,
-                    "source_count": len(sources)}, ensure_ascii=False, indent=2),
-        encoding="utf-8")
+    metadata = {
+        "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "mode": mode, "provider": provider, "duration_seconds": seconds,
+        "source_count": len(sources), "editorial": editorial,
+        "title": editorial.get("title", title),
+        "publication": "REVIEW_REQUIRED",
+    }
+    (OUTPUT / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     if not MIN_SECONDS <= seconds <= MAX_SECONDS:
-        raise RuntimeError(f"Audio duration is {seconds:.1f} seconds, outside 8–12 minutes. "
-                           "Add more Persian RSS sources or provide a better-length script via Make.")
-    cover()
-    render()
-    print(f"SUCCESS: {OUTPUT / 'podcast.mp4'} ({seconds:.1f} seconds; {mode})")
+        raise RuntimeError(f"Audio duration {seconds:.1f}s is outside 8–12 minutes. "
+                           "Adjust editorial length or use the manual script dispatch.")
+    render(sources, seconds, metadata["title"])
+    print(f"SUCCESS: {OUTPUT / 'podcast.mp4'} ({seconds:.1f} seconds, {mode}, voice={provider})")
 
 if __name__ == "__main__":
     asyncio.run(main())
