@@ -8,10 +8,13 @@ import requests
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 def _call(prompt, *, grounded=False, json_mode=False):
+    """Bounded retries and a free-tier Flash-Lite fallback; never expose the key."""
+    import time
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    preferred = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    models = list(dict.fromkeys([preferred, "gemini-3.5-flash-lite"]))
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.25, "maxOutputTokens": 8192},
@@ -20,20 +23,36 @@ def _call(prompt, *, grounded=False, json_mode=False):
         body["tools"] = [{"google_search": {}}]
     if json_mode:
         body["generationConfig"]["responseMimeType"] = "application/json"
-    response = requests.post(
-        GEMINI_URL.format(model=model),
-        headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-        json=body, timeout=130
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"Gemini API HTTP {response.status_code}: {response.text[:300]}")
-    data = response.json()
-    candidate = (data.get("candidates") or [{}])[0]
-    parts = candidate.get("content", {}).get("parts", [])
-    output = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
-    if not output.strip():
-        raise RuntimeError(f"Gemini returned no text (finishReason={candidate.get('finishReason')})")
-    return output, candidate.get("groundingMetadata") or {}
+    failures = []
+    for model in models:
+        for attempt in range(2):
+            try:
+                response = requests.post(
+                    GEMINI_URL.format(model=model),
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                    json=body, timeout=110
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    candidate = (data.get("candidates") or [{}])[0]
+                    parts = candidate.get("content", {}).get("parts", [])
+                    output = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+                    if not output.strip():
+                        raise RuntimeError(f"Gemini returned no text ({candidate.get('finishReason')})")
+                    print(f"Gemini editorial model used: {model}")
+                    return output, candidate.get("groundingMetadata") or {}
+                failures.append(f"{model}: HTTP {response.status_code}")
+                # Switch model quickly for permanent model, permission, or quota errors.
+                if response.status_code in (400, 401, 403, 404, 429):
+                    break
+                if response.status_code in (500, 502, 503, 504):
+                    time.sleep(2 + attempt * 4)
+                    continue
+                break
+            except requests.RequestException as exc:
+                failures.append(f"{model}: network {type(exc).__name__}")
+                time.sleep(2 + attempt * 4)
+    raise RuntimeError("Gemini models unavailable: " + "; ".join(failures))
 
 def prepare(items):
     """Return script, selected RSS items, editorial metadata; no sources fabricated."""
