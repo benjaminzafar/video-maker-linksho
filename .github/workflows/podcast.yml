@@ -46,7 +46,7 @@ jobs:
           TTS_VOICE: fa-IR-DilaraNeural
           TTS_RATE: -5%
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_MODEL: gemini-3.8-flash
           GEMINI_SEARCH_GROUNDING: 'false'
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
