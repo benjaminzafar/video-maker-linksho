@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: linksho-newsroom-validation
+  group: linksho-newsroom-final
   cancel-in-progress: false
 
 jobs:
