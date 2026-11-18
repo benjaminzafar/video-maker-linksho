@@ -1,5 +1,7 @@
 name: Build Persian news podcast
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   repository_dispatch:
     types: [make-podcast]
@@ -15,6 +17,7 @@ concurrency:
 
 jobs:
   build:
+    environment: GEMINI_API_KEY
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
