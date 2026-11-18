@@ -178,14 +178,20 @@ async def main():
                 script, sources, editorial = prepare(news)
                 mode = "gemini-editorial"
             except Exception as exc:
-                raise RuntimeError(f"Gemini editorial failed: {type(exc).__name__}: {exc}") from exc
+                # Keep production alive during Gemini free-tier capacity spikes,
+                # with an explicit audit trail and fully source-attributed RSS narration.
+                print(f"Gemini editorial unavailable: {type(exc).__name__}: {exc}")
+                mode = "persian-rss-fallback"
+                editorial = {"editor": "RSS fallback", "gemini_unavailable": type(exc).__name__}
+                script = compose_script(news[:30])
+                sources = news[:30]
         else:
             script = compose_script(news[:30])
             sources = news[:30]
     provider, seconds = await synthesize(script, OUTPUT / "voice.mp3")
     # The fallback RSS editor has predictable story-length granularity. Adjust
     # number of stories and resynthesize instead of silently accepting 14-minute episodes.
-    if mode == "persian-rss" and not MIN_SECONDS <= seconds <= MAX_SECONDS:
+    if mode in ("persian-rss", "persian-rss-fallback") and not MIN_SECONDS <= seconds <= MAX_SECONDS:
         count = len(sources)
         for attempt in range(4):
             ratio = 600 / max(seconds, 1)
