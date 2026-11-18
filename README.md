@@ -61,3 +61,11 @@ On Ubuntu, install `ffmpeg`, `fonts-noto-core` and `fonts-dejavu-core`, then `pi
 - Workflow artifacts are available through the Actions UI to users permitted to read Actions artifacts; they are **not** published to YouTube.
 - RSS text is untrusted input. The system restricts source IDs and dates but can't guarantee factual accuracy.
 - FFmpeg and local slide generation are free; GitHub's public-repo Actions are subject to applicable usage conditions. API free tiers may change.
+
+## Validated run (18 November 2026)
+
+- [Successful end-to-end run](https://github.com/benjaminzafar/video-maker-linksho/actions/runs/44298892557): **513.3 seconds (8 minutes 33 seconds)**, saved as the `linksho-weekly-podcast` Actions artifact.
+- Gemini 3.5 Flash-Lite successfully generated the Persian editorial opening; another 10 cited, previously unused RSS briefs completed the length. The episode is identified as `gemini-editorial`.
+- ElevenLabs API rejected the configured secret with status `api_key_id_used_as_api_key`: it is an API **key ID**, not the actual secret key. The successful video uses **Edge TTS** as a fallback. To turn on ElevenLabs, replace `ELEVENLABS_API_KEY` in the existing GitHub Environment (named `GEMINI_API_KEY`) with a new genuine API secret from ElevenLabs. Never put it in the repository or chat.
+- This repository produces reviewable MP4 files every Monday at 07:00 UTC. **YouTube auto-upload is not enabled** until valid YouTube OAuth authorization is configured; never claim a published video on the basis of an artifact alone.
+- No JSON2Video or recurring video-render subscription is needed. API and GitHub quotas still apply.
