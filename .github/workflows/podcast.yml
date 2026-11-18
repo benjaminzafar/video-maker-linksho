@@ -1,0 +1,44 @@
+name: Build Persian news podcast
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [make-podcast]
+  schedule:
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-persian-podcast
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install FFmpeg, fonts and Python libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Generate 8–12 minute Persian video
+        env:
+          TTS_VOICE: fa-IR-DilaraNeural
+          TTS_RATE: -5%
+        run: python build.py
+      - name: Save MP4, audio, sources and text
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linksho-weekly-podcast
+          path: output/
+          retention-days: 7
+          if-no-files-found: error
