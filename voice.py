@@ -59,6 +59,8 @@ def _eleven(script, output):
                 reason = detail.get("status", "") if isinstance(detail, dict) else ""
             except (ValueError, TypeError):
                 reason = ""
+            if reason in ("api_key_id_used_as_api_key", "invalid_api_key"):
+                os.environ["VOICE_PROVIDER"] = "edge"
             raise RuntimeError(f"ElevenLabs HTTP {resp.status_code} {reason} for chunk {i + 1}/{len(segments)}")
         if len(resp.content) < 1024:
             raise RuntimeError("ElevenLabs returned an unexpectedly small audio file")
