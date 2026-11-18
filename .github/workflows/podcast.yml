@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: weekly-persian-podcast
+  group: linksho-newsroom-validation
   cancel-in-progress: false
 
 jobs:
