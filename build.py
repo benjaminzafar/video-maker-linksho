@@ -13,6 +13,8 @@ import textwrap
 import time
 
 import edge_tts
+import imageio_ffmpeg
+from mutagen.mp3 import MP3
 from editorial import prepare
 from voice import synthesize
 from visuals import create as make_slides
@@ -122,12 +124,7 @@ def compose_script(items):
     return "\n\n".join(parts)
 
 def duration(path):
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        check=True, capture_output=True, text=True
-    )
-    return float(proc.stdout.strip())
+    return float(MP3(str(path)).info.length)
 
 async def speak(text, voice, rate):
     await edge_tts.Communicate(text, voice=voice, rate=rate).save(str(OUTPUT / "voice.mp3"))
@@ -145,7 +142,7 @@ def render(sources, seconds, title):
     entries.append(f"file 'slides/{slides[-1].name}'")
     list_path.write_text("\n".join(entries) + "\n", encoding="utf-8")
     subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
          "-safe", "0", "-f", "concat", "-i", str(list_path),
          "-i", str(OUTPUT / "voice.mp3"), "-r", "25",
          "-c:v", "libx264", "-preset", "veryfast",
