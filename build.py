@@ -15,7 +15,7 @@ import time
 import edge_tts
 import imageio_ffmpeg
 from mutagen.mp3 import MP3
-from editorial import prepare
+from editorial import prepare_long
 from voice import synthesize
 from visuals import create as make_slides
 import feedparser
@@ -172,7 +172,7 @@ async def main():
         mode = "persian-rss"
         if os.getenv("GEMINI_API_KEY", "").strip():
             try:
-                script, sources, editorial = prepare(news)
+                script, sources, editorial = prepare_long(news)
                 mode = "gemini-editorial"
             except Exception as exc:
                 # Keep production alive during Gemini free-tier capacity spikes,
