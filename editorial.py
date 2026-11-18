@@ -11,7 +11,7 @@ def _call(prompt, *, grounded=False, json_mode=False):
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.25, "maxOutputTokens": 8192},
@@ -109,7 +109,7 @@ def prepare(items):
     selected = [items[i - 1] for i in valid]
     details = {
         "editor": "gemini",
-        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
         "title": str(obj.get("title", "مرور هفتگی خبرها"))[:130],
         "script_words": words,
         "uncertainties": obj.get("uncertainties", [])[:12],
