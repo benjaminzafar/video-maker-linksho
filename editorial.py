@@ -13,8 +13,8 @@ def _call(prompt, *, grounded=False, json_mode=False):
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    preferred = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    models = list(dict.fromkeys([preferred, "gemini-3.5-flash-lite"]))
+    preferred = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    models = list(dict.fromkeys([preferred, "gemini-3.8-flash"]))
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.25, "maxOutputTokens": 8192},
@@ -30,7 +30,7 @@ def _call(prompt, *, grounded=False, json_mode=False):
                 response = requests.post(
                     GEMINI_URL.format(model=model),
                     headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                    json=body, timeout=110
+                    json=body, timeout=45
                 )
                 if response.status_code == 200:
                     data = response.json()
@@ -128,7 +128,7 @@ def prepare(items):
     selected = [items[i - 1] for i in valid]
     details = {
         "editor": "gemini",
-        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         "title": str(obj.get("title", "مرور هفتگی خبرها"))[:130],
         "script_words": words,
         "uncertainties": obj.get("uncertainties", [])[:12],
